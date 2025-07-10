@@ -21,7 +21,7 @@ public class ContaDAO {
 
     public void salvarConta(DadosAberturaConta dadosDaConta){
         var cliente = new Cliente(dadosDaConta.dadosCliente());
-        var conta = new Conta(dadosDaConta.numero(), cliente);
+        var conta = new Conta(dadosDaConta.numero(), BigDecimal.ZERO, true ,cliente);
 
         String sql = "INSERT INTO conta (numero, saldo, cliente_nome, cliente_cpf, cliente_email)" +
                 "VALUES(?, ?, ?, ?, ?)";
@@ -46,7 +46,8 @@ public class ContaDAO {
     public Set<Conta> listarContasAbertas() {
         Set<Conta> contas = new HashSet<>();
 
-        String sql = "SELECT * FROM conta";
+        String sql = "SELECT * FROM conta " +
+                "WHERE esta_ativa = true";
 
         try {
             PreparedStatement preparedStatement = conn.prepareStatement(sql);
@@ -55,7 +56,7 @@ public class ContaDAO {
             while(resultSet.next()) {
                 var clienteDados = new DadosCadastroCliente(resultSet.getString("cliente_nome"), resultSet.getString("cliente_cpf"), resultSet.getString("cliente_email"));
                 var cliente =  new Cliente(clienteDados);
-                contas.add(new Conta(resultSet.getInt("numero"), cliente));
+                contas.add(new Conta(resultSet.getInt("numero"), resultSet.getBigDecimal("saldo"), resultSet.getBoolean("esta_ativa"),cliente));
             }
 
             preparedStatement.close();
@@ -70,7 +71,7 @@ public class ContaDAO {
 
     public Conta buscarContaPorNumero(Integer numero) {
         Conta conta = null;
-        String sql = "SELECT * FROM conta WHERE numero = ?";
+        String sql = "SELECT * FROM conta WHERE numero = ? AND esta_ativa = true";
         try {
             var preparedStatement = conn.prepareStatement(sql);
             preparedStatement.setInt(1, numero);
@@ -79,7 +80,7 @@ public class ContaDAO {
             if (resultSet.next()) {
                 var clienteDados = new DadosCadastroCliente(resultSet.getString("cliente_nome"), resultSet.getString("cliente_cpf"), resultSet.getString("cliente_email"));
                 var cliente = new Cliente(clienteDados);
-                conta = new Conta(resultSet.getInt("numero"), cliente);
+                conta = new Conta(resultSet.getInt("numero"), resultSet.getBigDecimal("saldo"), resultSet.getBoolean("esta_ativa"),cliente);
             }
 
             preparedStatement.close();
@@ -90,5 +91,45 @@ public class ContaDAO {
         }
 
         return conta;
+    }
+
+    public void alterar(Integer numero, BigDecimal valor){
+        PreparedStatement ps;
+        String sql = "UPDATE conta SET saldo = ? WHERE numero = ? AND esta_ativa = true";
+
+        try {
+            conn.setAutoCommit(false);
+
+            ps = conn.prepareStatement(sql);
+
+            ps.setBigDecimal(1, valor);
+            ps.setInt(2, numero);
+
+            ps.executeUpdate();
+            conn.commit();
+            ps.close();
+            conn.close();
+        } catch (SQLException e) {
+            try {
+                conn.rollback();
+            } catch (SQLException ex) {
+                throw new RuntimeException(ex);
+            }
+            throw new RuntimeException("Erro ao alterar o saldo da conta: " + e.getMessage(), e);
+        }
+    }
+
+    public void encerrarConta(Integer numero) {
+        String sql = "UPDATE conta SET esta_ativa = false WHERE numero = ?";
+
+        try {
+            PreparedStatement preparedStatement = conn.prepareStatement(sql);
+            preparedStatement.setInt(1, numero);
+            preparedStatement.execute();
+            preparedStatement.close();
+            conn.close();
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao encerrar a conta: " + e.getMessage(), e);
+        }
     }
 }
